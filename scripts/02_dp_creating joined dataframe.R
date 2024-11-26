@@ -90,12 +90,68 @@ desp_coletiva_servico_domestico <- desp_coletiva_servico_domestico |>
       TRUE ~ 0),
     cuidado = case_when(
       V9001 %in% c(1901201,1901202,1901203,1901204,1900701) ~ 1,
+      TRUE ~ 0),
+    servico_mensalista = case_when(
+      V1905 == 1 ~ 1,
+      TRUE ~ 0),
+    servico_diarista = case_when(
+      V1905 == 3 ~ 1,
+      TRUE ~ 0),
+    servico_tipo_empregada = case_when(
+      V9001 %in% c(1900101,1900102) ~ 1,
+      TRUE ~ 0),
+    servico_tipo_cozinheira = case_when(
+      V9001 %in% c(1900601, 1900602) ~ 1,
+      TRUE ~ 0),
+    servico_tipo_faxineira = case_when(
+      V9001 %in% c(1900201, 1900202) ~ 1,
+      TRUE ~ 0),
+    servico_tipo_baba = case_when(
+      V9001 %in% c(1900701) ~ 1,
+      TRUE ~ 0),
+    servico_tipo_arrumadeira = case_when(
+      V9001 %in% c(1901601,1901701) ~ 1,
+      TRUE ~ 0),
+    servico_tipo_caseira = case_when(
+      V9001 %in% c(1900901) ~ 1,
+      TRUE ~ 0),
+    servico_tipo_acompanhante = case_when(
+      V9001 %in% c(1901202) ~ 1,
+      TRUE ~ 0),
+    servico_tipo_lavadeira = case_when(
+      V9001 %in% c(1900401,1900402) ~ 1,
+      TRUE ~ 0),
+    servico_tipo_passadeira = case_when(
+      V9001 %in% c(1900501,1900502) ~ 1,
+      TRUE ~ 0),
+    servico_tipo_lav_pass = case_when(
+      V9001 %in% c(1900301,1900302) ~ 1,
       TRUE ~ 0)
     ) |>
   filter(servico_domestico == 1) |>
-  select(COD_UPA, NUM_DOM, NUM_UC, servico_domestico, cuidado, despesa_servico_domestico) |>
+  select(
+    COD_UPA, NUM_DOM, NUM_UC, servico_domestico, cuidado, despesa_servico_domestico,
+    servico_mensalista, servico_diarista, starts_with("servico_tipo")
+  ) |>
   group_by(COD_UPA, NUM_DOM, NUM_UC) |>
-  reframe(despesa_servico_domestico = sum(despesa_servico_domestico)) |>
+  reframe(
+    servico_domestico = max(servico_domestico),
+    servico_quantidade = sum(servico_domestico),
+    cuidado = max(cuidado),
+    despesa_servico_domestico = sum(despesa_servico_domestico),
+    servico_mensalista = max(servico_mensalista),
+    servico_diarista = max(servico_diarista),
+    servico_tipo_empregada = max(servico_tipo_empregada),
+    servico_tipo_cozinheira = max(servico_tipo_cozinheira),
+    servico_tipo_faxineira = max(servico_tipo_faxineira),
+    servico_tipo_baba = max(servico_tipo_baba),
+    servico_tipo_arrumadeira = max(servico_tipo_arrumadeira),
+    servico_tipo_caseira = max(servico_tipo_caseira),
+    servico_tipo_acompanhante = max(servico_tipo_acompanhante),
+    servico_tipo_lavadeira = max(servico_tipo_lavadeira),
+    servico_tipo_passadeira = max(servico_tipo_passadeira),
+    servico_tipo_lav_pass = max(servico_tipo_lav_pass)
+  ) |>
   arrange(COD_UPA, NUM_DOM, NUM_UC)
 
 # Exportacao dos dados agregados por UC
@@ -136,7 +192,7 @@ moradores_juncao3 <- moradores_juncao2 |>
             # multiple = "first"
   )
 
-# 4 - juntando com aluguel estimado
+# 4 - juntando com despesa servico domestico
 moradores_juncao4 <- moradores_juncao3 |>
   arrange(COD_UPA, NUM_DOM, NUM_UC) |>
   left_join(desp_serv_domestico, by = c("COD_UPA","NUM_DOM","NUM_UC"), keep = FALSE,
