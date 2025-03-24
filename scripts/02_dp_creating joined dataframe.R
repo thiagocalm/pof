@@ -2,8 +2,13 @@
 #'@project POF 2017-2018 in R
 #'@responsible-script Thiago Cordeiro Almeida
 #'@contact thiagocordalmeida_at_gmail.com
-#'@date-update 2024-11-24
+#'@date-update 2025-03-25
 #'@description Data processing - creating dataframe with UC variables at individual level
+#'@details
+#' [PT]
+#' ---
+#' ---
+#'
 #'###########################################################################
 options(scipen = 99999)
 rm(list = ls())
@@ -82,12 +87,6 @@ desp_coletiva_servico_domestico <- read_parquet(file = file.path(INPUT_DIR,"desp
 
 desp_coletiva_servico_domestico <- desp_coletiva_servico_domestico |>
   mutate(
-    servico_domestico = case_when(
-      QUADRO == 19 ~ 1,
-      TRUE ~ 0),
-    despesa_servico_domestico = case_when(
-      servico_domestico == 1 ~ valor_mensal,
-      TRUE ~ 0),
     cuidado = case_when(
       V9001 %in% c(1901201,1901202,1901203,1901204,1900701) ~ 1,
       TRUE ~ 0),
@@ -128,19 +127,37 @@ desp_coletiva_servico_domestico <- desp_coletiva_servico_domestico |>
       V9001 %in% c(1900301,1900302) ~ 1,
       TRUE ~ 0)
     ) |>
-  filter(servico_domestico == 1) |>
-  select(
-    COD_UPA, NUM_DOM, NUM_UC, servico_domestico, cuidado, despesa_servico_domestico,
-    servico_mensalista, servico_diarista, starts_with("servico_tipo")
+  # TCA: 2025-03-24 - criando variavel de servico domestico - VER OBSERVACOES E ARQUIVO DE DECISAO METODOLOGICA SOBRE ESTE PONTO
+  mutate(
+    servico_domestico = case_when(
+      QUADRO == 19 ~ 1,
+      TRUE ~ 0),
+    # servico_domestico1 = servico_tipo_empregada + servico_tipo_cozinheira +
+    #   servico_tipo_faxineira + servico_tipo_baba + servico_tipo_arrumadeira +
+    #   servico_tipo_caseira + + servico_tipo_lavadeira + servico_tipo_passadeira +
+    #   servico_tipo_lav_pass,
+    # servico_domestico = case_when(
+    #   servico_domestico1 > 0 ~ 1,
+    #   TRUE ~ 0),
+    despesa_servico_domestico = case_when(
+      servico_domestico == 1 ~ valor_mensal,
+      TRUE ~ 0),
   ) |>
+  select(-any_of(c("servico_domestico1"))) |>
+  # TCA: 2025-03-24 - Vamos trabalhar com a base completa por enquanto
+  filter(servico_domestico == 1) |>
   group_by(COD_UPA, NUM_DOM, NUM_UC) |>
-  reframe(
-    servico_domestico = max(servico_domestico),
+  mutate(
     servico_quantidade = sum(servico_domestico),
+    servico_domestico = max(servico_domestico),
     cuidado = max(cuidado),
     despesa_servico_domestico = sum(despesa_servico_domestico),
     servico_mensalista = max(servico_mensalista),
     servico_diarista = max(servico_diarista),
+    servico_mens_diar = case_when(
+      servico_mensalista + servico_diarista > 1 ~ 1,
+      TRUE ~ 0
+    ),
     servico_tipo_empregada = max(servico_tipo_empregada),
     servico_tipo_cozinheira = max(servico_tipo_cozinheira),
     servico_tipo_faxineira = max(servico_tipo_faxineira),
@@ -152,12 +169,49 @@ desp_coletiva_servico_domestico <- desp_coletiva_servico_domestico |>
     servico_tipo_passadeira = max(servico_tipo_passadeira),
     servico_tipo_lav_pass = max(servico_tipo_lav_pass)
   ) |>
-  arrange(COD_UPA, NUM_DOM, NUM_UC)
+  ungroup() |>
+  arrange(COD_UPA, NUM_DOM, NUM_UC) |>
+  select(
+    COD_UPA, NUM_DOM, NUM_UC, servico_domestico, servico_quantidade, cuidado, despesa_servico_domestico,
+    servico_mensalista, servico_diarista, servico_mens_diar, starts_with("servico_tipo")
+  )
+
+# # Criando variavel dependente
+#
+# desp_coletiva_servico_domestico <- desp_coletiva_servico_domestico |>
+#   mutate(
+#     tipo_consumo_serv_domestico = case_when(
+#       # 2 - Familias que consomem SOMENTE servicos domesticos de diaristas
+#       despesa_servico_domestico > 0 & servico_diarista == 1 & servico_mens_diar == 0 ~ 2,
+#       # 3 - Familias que consomem SOMENTE servicos domesticos de mensalistas
+#       despesa_servico_domestico > 0 & servico_mensalista == 1 & servico_mens_diar == 0 ~ 3,
+#       # 4 - Familias que consomem servicos domesticos de diaristas e mensalistas
+#       despesa_servico_domestico > 0 & servico_mens_diar == 1 ~ 4,
+#       # 1 - Familias que nao consomem servico domestico
+#       TRUE ~ 1
+#     )
+#   ) |>
+#   distinct()
 
 # Exportacao dos dados agregados por UC
 
 write_parquet(desp_coletiva_servico_domestico, file.path(OUTPUT_DIR,"raw","despesa_coletiva com servico domestico.parquet"))
 rm(desp_coletiva_servico_domestico)
+
+
+# NEXT STEP #
+# Comecar as outras variaveis (linha 151 do codigo da Fatinha)
+# Decidir forma de organizacao das bases de dados
+
+
+
+
+
+
+
+
+
+
 
 # Juntar as bases ---------------------------------------------------------
 
@@ -199,16 +253,9 @@ moradores_juncao4 <- moradores_juncao3 |>
             multiple = "first"
   )
 
-# Tratamento dos dados depois da juncao
-
-moradores_agregado <- moradores_juncao4 |>
-  select(1:56,valor_mensal_desp_individual,valor_mensal_desp_coletiva,valor_mensal_aluguel,
-         despesa_servico_domestico) |>
-  as_tibble()
-
 # removendo bases que nao serao utilizadas mais
 rm(aluguel_estimado_uc, desp_coletiva_uc, desp_individual_uc, desp_serv_domestico,
    moradores, moradores_juncao1,moradores_juncao2,moradores_juncao3,moradores_juncao4)
 
 # exportacao da base de moradores com variaveis agregadas para domicilio
-write_parquet(moradores_agregado, file.path(OUTPUT_DIR,",moradores_agregado.parquet"))
+write_parquet(moradores_agregado, file.path(OUTPUT_DIR,"moradores_agregado.parquet"))
